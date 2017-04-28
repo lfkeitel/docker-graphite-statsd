@@ -1,50 +1,42 @@
-FROM phusion/baseimage:0.9.15
-MAINTAINER Nathan Hopkins <natehop@gmail.com>
-
-#RUN echo deb http://archive.ubuntu.com/ubuntu $(lsb_release -cs) main universe > /etc/apt/sources.list.d/universe.list
-RUN apt-get -y update\
- && apt-get -y upgrade
+FROM phusion/baseimage:0.9.21
+MAINTAINER Lee Keitel <lee@onesimussystems.com>
 
 # dependencies
-RUN apt-get -y --force-yes install vim\
- nginx\
- python-dev\
- python-flup\
- python-pip\
- expect\
- git\
- memcached\
- sqlite3\
- libcairo2\
- libcairo2-dev\
- python-cairo\
- pkg-config\
- nodejs
+RUN apt-get -y update && \
+    apt-get -y --force-yes install \
+    vim \
+    nginx \
+    python \
+    python-dev \
+    python-flup \
+    python-pip \
+    python-cffi \
+    expect \
+    git \
+    memcached \
+    sqlite3 \
+    libcairo2 \
+    libcairo2-dev \
+    python-cairo \
+    pkg-config \
+    nodejs && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-# python dependencies
-RUN pip install django==1.4\
- python-memcached==1.53\
- django-tagging==0.3.1\
- whisper==0.9.13\
- twisted==11.1.0\
- txAMQP==0.6.2
-
-# install graphite
-RUN git clone -b 0.9.14 https://github.com/graphite-project/graphite-web.git /usr/local/src/graphite-web
-WORKDIR /usr/local/src/graphite-web
-RUN python ./setup.py install
-ADD scripts/local_settings.py /opt/graphite/webapp/graphite/local_settings.py
-ADD conf/graphite/ /opt/graphite/conf/
+# install graphite-api
+RUN pip install graphite-api gunicorn
 
 # install whisper
-RUN git clone -b 0.9.14 https://github.com/graphite-project/whisper.git /usr/local/src/whisper
-WORKDIR /usr/local/src/whisper
-RUN python ./setup.py install
+RUN git clone -b 1.0.1 https://github.com/graphite-project/whisper.git /usr/local/src/whisper && \
+    cd /usr/local/src/whisper && \
+    pip install -r requirements.txt && \
+    python ./setup.py install
 
 # install carbon
-RUN git clone -b 0.9.14 https://github.com/graphite-project/carbon.git /usr/local/src/carbon
-WORKDIR /usr/local/src/carbon
-RUN python ./setup.py install
+RUN git clone -b 1.0.1 https://github.com/graphite-project/carbon.git /usr/local/src/carbon && \
+    cd /usr/local/src/carbon && \
+    pip install -r requirements.txt && \
+    python ./setup.py install
 
 # install statsd
 #RUN git clone -b v0.7.2 https://github.com/etsy/statsd.git /opt/statsd
@@ -57,10 +49,6 @@ ADD conf/nginx/graphite.conf /etc/nginx/sites-available/graphite.conf
 ADD conf/nginx/.htpasswd /etc/nginx/.htpasswd
 RUN ln -s /etc/nginx/sites-available/graphite.conf /etc/nginx/sites-enabled/graphite.conf
 
-# init django admin
-ADD scripts/django_admin_init.exp /usr/local/bin/django_admin_init.exp
-RUN /usr/local/bin/django_admin_init.exp
-
 # logging support
 RUN mkdir -p /var/log/carbon /var/log/graphite /var/log/nginx
 ADD conf/logrotate /etc/logrotate.d/graphite
@@ -72,9 +60,11 @@ ADD daemons/graphite.sh /etc/service/graphite/run
 # ADD daemons/statsd.sh /etc/service/statsd/run
 ADD daemons/nginx.sh /etc/service/nginx/run
 
+COPY conf/graphite/ /opt/graphite/conf/
+COPY conf/graphite-api.yaml /etc/graphite-api.yaml
+
 # cleanup
-RUN apt-get clean\
- && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+RUN rm -rf /tmp/* /var/tmp/*
 
 # defaults
 EXPOSE 80 2003-2004 2023-2024 8125/udp 8126
